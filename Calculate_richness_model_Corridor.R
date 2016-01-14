@@ -1,0 +1,145 @@
+#Hem Nalini Morzaria Luna
+#March 2015
+#organize data frome excel spreadsheets
+#clean up the space
+#REQUIRES R 3.1, package SDMTools not available for 3.2 
+
+rm(list=ls())
+
+#use these lines if packages are not installed
+#install.packages("sp","gdata","XLConnect","maptools",PBSmapping","rgdal","fields","raster","rasterVis")
+#install.packages("spocc") # this package had a dependency issue, check later to see if fixed
+
+require(gdata)
+require(maptools)   # used here to read in the spatial data
+require(PBSmapping) # for GIS-like geoprocessing operations
+require(rgdal)  
+require(fields)
+require(raster)
+require(rasterVis)
+require(sp)
+require(sperich)
+require(SDMTools)
+#require(dplyr)#only available for R 3.2
+
+
+#library spocc can be used to get data from GBIF and other repositories USGS's BISON, iNaturalist, Berkeley Ecoinformatics Engine
+#eBird, AntWeb/ However there some error with the package and the syntax from their manual does not work.
+
+#spocc.data <- occ(from = 'gbif',geometry=this.polygon, limit=50)
+# USER BLOCK: CHECK AND CHANGE OPTIONS HERE  
+#_________________________________________________________________________
+#set working directories
+#this should match the path where your files directories are stored
+#note the "/" go in the opposite direction than in Windows explorer
+
+datafiles="E:/Archivos/1Archivos/Articulos/En preparacion/Spatial management/Datos/Ocurrencia_especies" #put path
+analysispath = "E:/Archivos/SIG/Proyectos/ArcGis/Datos ordenados/Shapes y layers/Archivos_articulos/Zonation"
+filepath="E:/Archivos/1Archivos/Articulos/En preparacion/Spatial management/Analysis" #put path
+
+#set directory path
+setwd(analysispath)
+
+#read in Gulf of California shapefile
+goc.shape <- readOGR(".", "Golfo_california_polygon_WSG84")
+#read in grid shapefile
+
+# #read in Northern Gulf of California shapefile
+# goc.shape <- readOGR(".", "Atlantis12_AggregatePolygons")
+# 
+# 
+# projections
+#Lambert
+crs.geo.lcc <- CRS("+proj=lcc +lat_1=17.5 +lat_2=29.5 +lat_0=0 +lon_0=-102 +x_0=2000000 +y_0=0 +datum=NAD27 +units=m +no_defs +ellps=clrk66 +nadgrids=@conus,@alaska,@ntv2_0.gsb,@ntv1_can.dat")
+crs.geo.wgs <- CRS("+proj=longlat +datum=WGS84 +no_defs +ellps=WGS84 +towgs84=0,0,0")  # geographical, datum WGS84
+
+#choose full model or only corridor
+#biodiversity.all  = read.csv("biodiver_species_goc.csv",header=T, fill=TRUE) #all
+
+setwd(filepath)
+biodiversity.all  = read.csv("biodiver_species_corridor.csv",header=T, fill=TRUE) #corridor
+
+
+
+########################User can ignore everything below
+#read in species occurrance
+#this data was obtained and cleaned in Data_biodiversity.R
+#files were then organized in Organize_biodiversity.R
+
+
+#select species, lat and lon and rename
+biodiversity = biodiversity.all[,c('Longitud','Latitud','NewSpecies')]
+names(biodiversity) = c('long','lat','speciesID')
+
+section.biodiv = biodiversity
+
+coordinates(section.biodiv) <- c("long", "lat")
+plot(section.biodiv)
+# Using package sperich to create biodiversity model 
+
+resolution=0.08
+all.species=-1
+
+  dimension = getDimension(biodiversity,resolution)
+  shift = getShift(biodiversity)
+  
+  
+  
+  
+  #create null masks
+  landwatermask = createLandwatermask(NULL,dimension,shift,resolution)
+  heightwatermask = createHeightmask(NULL,dimension,shift,resolution)
+  
+  #map species ocurrence
+  noninterpolatedgrid = createNonInterpolatedGrid(biodiversity,dimension,shift,resolution, all.species)
+  
+  #calculate inverse-distance weighted richness
+  
+  species.richness.weighted = species.richness(biodiversity,
+                                               landwatermask=landwatermask,
+                                               distances=1:10,
+                                               weight=0.5,
+                                               dimension=dimension,
+                                               shift=shift,
+                                               resolution,
+                                               upperbound=3000,
+                                               all.species,
+                                               silent=FALSE,
+                                               do.parallel=FALSE)
+  #adjust the result for sampling effort
+  #set clusterlimit to prepare clusterlist
+  clusterlist=searchClusters(species.richness.weighted,
+                             dimension,
+                             shift,
+                             resolution,
+                             clusterlimit = 100)
+  
+  #adjust inverse-weighted species
+  #richness grid for sampling effort
+  
+  species.richness.adjusted = adjustment(species.richness.weighted,
+                                         noninterpolatedgrid,
+                                         clusterlist)
+  
+  #export as grid
+  
+  exportAsGDAL(species.richness.adjusted, shift, resolution, 
+               directory=getwd(), filename="species_richness_corridor.tif", drivername="GTiff")
+  
+  
+  createImage(grid=species.richness.adjusted,landwatermask,
+              image.title = "GOC richness",
+              directory=getwd(),
+              filename="mapgoc_adjusted.png",
+              shift,
+              part=15,
+              resolution)
+
+  
+  createImage(grid=species.richness.weighted,landwatermask,
+              image.title = "GOC richness",
+              directory=getwd(),
+              filename="mapgoc.png",
+              shift,
+              part=15,
+              resolution)

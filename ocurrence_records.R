@@ -21,8 +21,8 @@ if(!require(Hmisc)){install.packages("Hmisc"); library(Hmisc)}
 if(!require(spocc)){install.packages("spocc"); library(spocc)}
 
 
-workpath = "E:/Archivos/1Archivos/Articulos/En preparacion/Vulnerability_GOC_Pacific/Analysis/RCode"
-
+workpath = "E:/Archivos/1Archivos/Articulos/En preparacion/Biodiversity_model/Analysis/RCode"
+setwd(workpath)
 #' retrieve all records for an ecosystem
 #' Gulf of California = 165
 #' 
@@ -104,10 +104,10 @@ gbif.res = occ(geometry = eachpolygon, from = c("vertnet","gbif","bison","ebird"
 biodiversity = matrix(0,nrow=0,ncol=3) %>% as.data.frame %>% 
 setNames(c("scientificname","geopoint.lon","geopoint.lat"))
 
-for(eachnumber in 1:10){
+for(eachnumber in 1:20){
   thisoffset = 5000*eachnumber
   df1 <- idig_search_records(rq=list(country="mexico", geopoint=list(type="exists")),
-                             fields=c("scientificname", "geopoint"), limit=thisoffset)
+                             fields=c("scientificname", "geopoint"), limit=5000,offset=thisoffset)
   biodiversity = rbind(biodiversity,df1)
   }
 

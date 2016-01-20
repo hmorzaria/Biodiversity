@@ -124,7 +124,7 @@ print(paste("Records retreived:", nrow(biodiversity.coordinates),sep= " "))
 biodiversity = matrix(0,nrow=0,ncol=3) %>% as.data.frame %>% 
 setNames(c("scientificname","geopoint.lon","geopoint.lat"))
 
-for(eachnumber in 1:100){
+for(eachnumber in 51:100){
   thisoffset = 5000*eachnumber
   df1 <- idig_search_records(rq=list(country="mexico", geopoint=list(type="exists")),
                              fields=c("scientificname", "geopoint"), limit=5000,offset=thisoffset)

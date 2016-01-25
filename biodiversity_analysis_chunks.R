@@ -41,6 +41,12 @@ if(!require(readxl)){install.packages("readxl"); library(readxl)}
 if(!require(knitr)){install.packages("knitr"); library(knitr)}
 if(!require(knitcitations)){install.packages("knitcitations"); library(knitcitations)}
 if(!require(taxize)){install.packages("taxize"); library(taxize)}
+if(!require(sperich)){install.packages("sperich"); library(sperich)}
+if(!require(ggplot2)){install.packages("ggplot2"); library(ggplot2)}
+if(!require(ggmap)){install.packages("ggmap"); library(ggmap)}
+if(!require(cowplot)){install.packages("cowplot"); library(cowplot)}
+if(!require(rmarkdown)){install.packages("rmarkdown"); library(rmarkdown)}
+if(!require(xtable)){install.packages("xtable"); library(xtable)}
 
 
 cleanbib()
@@ -60,11 +66,8 @@ savepath = "E:/Archivos/1Archivos/Articulos/En preparacion/Biodiversity_model/An
     
 setwd(savepath)
 # read in file with all records for the goc 
-biodiversity.goc  = fread("goc_biodiversity.csv",header=T) %>% 
-        tbl_df
-print(paste("biodiversity has ",nrow(biodiversity.goc)," records")) #print records
-    
-biodiv.species = biodiversity %>% 
+
+biodiv.species = biodiversity.all %>% 
   .$species %>% unique 
 
 #' this table has to be read manually 

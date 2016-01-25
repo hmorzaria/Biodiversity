@@ -122,22 +122,24 @@ fishbase.coordinates <- data.frame(fishbase.data.1[,2], fishbase.data.1[,5],fish
 empty_as_na <- function(x) ifelse(x=="", NA,x)
 
 #' clean up fishbase records and convert to main database
-biodiversity.coordinates = fishbase.coordinates %>% tbl_df %>% 
+biodiversity.sp = fishbase.coordinates %>% tbl_df %>% 
   mutate(source = "fishbase") %>% 
   setNames(c("species","lat","lon","source")) %>% 
-  mutate(lat=as.character(lat)) %>%  mutate(lat=as.numeric(lat)) %>% 
-  mutate(lon=as.character(lon)) %>%  mutate(lon=as.numeric(lon)) 
+  mutate_each(funs(as.character),lat:lon)%>% 
+  mutate_each(funs(as.numeric),lat:lon) 
 #' eliminate empty species names and duplicate records
-biodiversity.coordinates[biodiversity.coordinates==""]  <- NA
-biodiversity.coordinates = na.omit(biodiversity.coordinates)
-biodiversity.coordinates = biodiversity.coordinates[!duplicated(biodiversity.coordinates[,c('species', 'lat', 'lon')]),]
+biodiversity.sp[biodiversity.sp==""]  <- NA
+biodiversity.sp = na.omit(biodiversity.sp)
+biodiversity.sp = biodiversity.sp[!duplicated(biodiversity.sp[,c('species', 'lat', 'lon')]),]
 
 #' print records
-print(paste("Records retreived:", nrow(biodiversity.coordinates),sep= " "))
+print(paste("Records retreived:", nrow(biodiversity.sp),sep= " "))
+
+write.csv(biodiversity.sp,file="record_queries1.csv")
 
 #' retrieve iDigBio
 #' can only retrieve records for all Mexico
-biodiversity = matrix(0,nrow=0,ncol=3) %>% as.data.frame %>% 
+biodiversity.sp = matrix(0,nrow=0,ncol=3) %>% as.data.frame %>% 
 setNames(c("scientificname","geopoint.lon","geopoint.lat")) 
 
 print("Now querying iDigBio")
@@ -147,27 +149,25 @@ for(eachnumber in 1:1000){
    thisoffset = 5000*eachnumber
   df1 <- idig_search_records(rq=list(country="mexico", geopoint=list(type="exists")),
                              fields=c("scientificname", "geopoint"), limit=5000,offset=thisoffset)
-  biodiversity = rbind(biodiversity,df1)
-  biodiversity = biodiversity[!duplicated(biodiversity[,c('scientificname', 'geopoint.lon', 'geopoint.lat')]),]
+  biodiversity.sp = rbind(biodiversity.sp,df1)
+  biodiversity.sp = biodiversity.sp[!duplicated(biodiversity.sp[,c('scientificname', 'geopoint.lon', 'geopoint.lat')]),]
   }
 
 setwd(savepath)
-#use this to save the complete data file
-write.csv(biodiversity,file="idigbio_Mexico.csv")
 
 #modify data frame names and capitalization
-biodiversity = biodiversity %>% tbl_df %>% 
+biodiversity.sp = biodiversity.sp %>% tbl_df %>% 
 select(scientificname,geopoint.lat,geopoint.lon) %>% 
   mutate(source = "idigbio") %>% 
            setNames(c("species","lat","lon","source"))%>% 
   mutate(species = capitalize(species))
 
-#bind with fishbase results and eliminate duplicates
-biodiversity.coordinates2 = rbind(biodiversity.coordinates, biodiversity)
-biodiversity.coordinates2 = biodiversity.coordinates2[!duplicated(biodiversity.coordinates2[,c('species', 'lat', 'lon')]),]
+#use this to save the complete data file
+write.csv(biodiversity.sp,file="record_queries2.csv")
 
 #' print records
-print(paste("Records retreived:", nrow(biodiversity.coordinates2),sep= " "))
+print(paste("Records retreived:", nrow(biodiversity.sp),sep= " "))
+
 
 #create new matrix for output of spatial queries
 biodiversity.sp = matrix(0,nrow=0,ncol=4) %>% as.data.frame %>% 
@@ -179,7 +179,10 @@ biodiversity.sp = matrix(0,nrow=0,ncol=4) %>% as.data.frame %>%
 
 print("Now querying spatial data rbison, rgbif, ecoengine")
 for(eachpolygon in 1:length(poly.data)){
-  
+
+ 
+    print(paste("Records retrieved from polygons ",nrow(biodiversity.sp),sep = " "))
+    
 #select polygons or bounding box    
   this.polygon = poly.data[eachpolygon]#subset bounding box
   this.bb = bbox.data[eachpolygon]#subset bounding box
@@ -223,7 +226,7 @@ if(gbif.data[1]!="no data found, try a different search"){
 if(ee.data.frame!="No records"){
  ee.data = ee.data.frame %>% .$data %>% tbl_df() %>% 
     select(scientific_name, latitude, longitude) %>% 
-    setNames(c("name","lat","lon")) %>% 
+    setNames(c("species","lat","lon")) %>% 
     mutate(source = "ecoengine")
 }else {
   ee.data = matrix(0,nrow=0,ncol=4) %>% data.frame %>% tbl_df %>% 
@@ -239,44 +242,73 @@ biodiversity.sp = biodiversity.sp[!duplicated(biodiversity.sp[,c('species', 'lat
 
   }
 
+#use this to save the complete data file
+write.csv(biodiversity.sp,file="record_queries3.csv")
+
+#' print records
+print(paste("Records retreived:", nrow(biodiversity.sp),sep= " "))
+
+
+#create new matrix for output of spatial queries
+biodiversity.sp = matrix(0,nrow=0,ncol=4) %>% as.data.frame %>% 
+  setNames(c("species","lat","lon","source")) 
+
 print("Now querying vertnet")
   # query Vertnet using spatial points  
   
   for(eachpoint in 1:nrow(goc.point.grid)) {
+    for(eachpoint in 4194:nrow(goc.point.grid)) {
     this.point = goc.point.grid[eachpoint,]#point
     print(paste("Analyzing grid point ",eachpoint,sep = " "))
         point.lat = this.point[,2]
     point.lon = this.point[,1]
     
-    vertnet.data <- spatialsearch(lat = point.lat, lon = point.lon, radius = 15000, limit = 1000, verbose= TRUE) #radius in meters
+    vertnet.data <- spatialsearch(lat = point.lat, lon = point.lon, radius = 15000, limit = 1000, verbose= TRUE) %>% 
+      .$data %>% data.frame #radius in meters
     #' only modify dataframe if records are available
     test.res = is.null(vertnet.data)
     if(test.res==FALSE)
     {
+      if (any(grepl("specificepithet",colnames(vertnet.data)))==TRUE){
+        #create scientificname column when species and genus are separate 
+        vertnet.data = vertnet.data %>% tbl_df %>% 
+          mutate(scientificname = paste(genus,specificepithet, sep= " "))  %>%  
+        select(scientificname, decimallongitude, decimallatitude) %>% 
+        mutate(source = "vertnet") %>% 
+          setNames(c('species', 'lat', 'lon',"source")) %>% # rename columns
+          mutate_each(funs(as.character),lat:lon)%>% 
+          mutate_each(funs(as.numeric),lat:lon)
+        vert.names = unique(vertnet.data$scientificname)
+        
+      }else if (any(grepl("scientificname",colnames(vertnet.data)))==TRUE){
       # eliminate records with no scientific name
       vertnet.data = as.data.frame(vertnet.data$data)
       vert.names = unique(vertnet.data$scientificname)
-      
+      }
       if (!length(vert.names)==0){
         
         vertnet.data = vertnet.data %>% tbl_df %>% select(scientificname, decimallongitude, decimallatitude) %>% 
           mutate(source = "vertnet") %>% 
           setNames(c('species', 'lat', 'lon',"source")) %>% # rename columns
-          mutate(lat=as.character(lat)) %>%  mutate(lat=as.numeric(lat)) %>% 
-          mutate(lon=as.character(lon)) %>%  mutate(lon=as.numeric(lon)) 
+          mutate_each(funs(as.character),lat:lon)%>% 
+          mutate_each(funs(as.numeric),lat:lon)
+        
       }} else {
          
         vertnet.data = matrix(0,nrow=0,ncol=4) %>% data.frame %>% tbl_df %>% 
           setNames(c("species","lat","lon","source"))
-               }
-    biodiversity.sp = rbind(biodiversity.sp, vertnet.data)
-    biodiversity.sp = biodiversity.sp[!duplicated(biodiversity.sp[,c('species', 'lat', 'lon')]),]
+      }
     
+    biodiversity.sp = rbind(biodiversity.sp, vertnet.data)
     }
   
-
+ setwd(savepath)
+write(biodiversity.sp,file="record_queries4.csv")
 # get ebird records
 print("Now querying ebird")
+
+biodiversity.sp = matrix(0,nrow=0,ncol=4) %>% as.data.frame %>% 
+  setNames(c("species","lat","lon","source")) 
 
 regions.ebird = c('MX-SON','MX-BCN','MX-SIN','MX-BCS','MX-NAY','MX-JAL')
 for(eachregion in 1:length(regions.ebird))
@@ -289,26 +321,29 @@ for(eachregion in 1:length(regions.ebird))
       select(sciName,lat,lng) %>% 
       setNames(c('species', 'lat', 'lon')) %>% 
       mutate(source = "ebird") %>% 
-      mutate_each(funs(as.numeric),lat:lon)#make sure lon and lat are numeric
+     mutate_each(funs(as.character),lat:lon)%>% 
+     mutate_each(funs(as.numeric),lat:lon)#make sure lon and lat are numeric
  } else {
    ebird.data = matrix(0,nrow=0,ncol=4) %>% data.frame %>% tbl_df %>% 
      setNames(c("species","lat","lon","source"))
    
  }
  biodiversity.sp = rbind(biodiversity.sp, ebird.data)
- biodiversity.sp = biodiversity.sp[!duplicated(biodiversity.sp[,c('species', 'lat', 'lon')]),]
- 
+  
 }
 
 #' bind spatial records and eliminate duplicates
-biodiversity.coordinates3 = rbind(biodiversity.coordinates2, biodiversity.sp)
-#' eliminate duplicates
-biodiversity.coordinates3 = biodiversity.coordinates3[!duplicated(biodiversity.coordinates3[,c('species', 'lat', 'lon')]),]
-#' eliminate rows with NA
-biodiversity.coordinates3 = biodiversity.coordinates3[complete.cases(biodiversity.coordinates3),]#eliminate rows with NA
+biodiversity.sp = biodiversity.sp %>% 
+  mutate_each(funs(as.character),lat:lon) %>% 
+mutate_each(funs(as.numeric),lat:lon)
+
+biodiversity.sp = biodiversity.sp[!duplicated(biodiversity.sp[,c('species', 'lat', 'lon')]),]
+
 
 #' print records
-print(paste("Records retreived:", nrow(biodiversity.coordinates3),sep= " "))
+print(paste("Records retreived:", nrow(biodiversity.sp),sep= " "))
+
+write.csv(biodiversity.sp,"record_queries5.csv")
 
 print("Now combining pre-existing data")
 print("Reading Ulloa et al. 2006 files")
@@ -316,7 +351,7 @@ print("Reading Ulloa et al. 2006 files")
 # now retreive records from other databases
 setwd(ulloafiles)
 csv.files <- list.files(pattern = "\\.csv$")# list files
-retrieved.sp = matrix(0,nrow=0,ncol=4) %>% data.frame %>% 
+biodiversity.sp = matrix(0,nrow=0,ncol=4) %>% data.frame %>% 
   setNames(c("species","lat","lon","source"))
 
 for(eachfile in 1:length(csv.files))
@@ -328,9 +363,10 @@ for(eachfile in 1:length(csv.files))
     select(NOM_CIEN, LATITUD, LONGITUD) %>% 
     mutate(source = "ulloa") %>% 
     setNames(c("species","lat","lon","source")) %>% 
+    mutate_each(funs(as.character),lat:lon)%>% 
     mutate_each(funs(as.numeric),lat:lon) 
   
-  retrieved.sp = rbind(retrieved.sp,ulloa.data)
+  biodiversity.sp = rbind(biodiversity.sp,ulloa.data)
 }
 
 print("Reading OBIS files")
@@ -345,10 +381,10 @@ for(eachfile in 1:length(csv.files)){
   obis.data  = fread(csv.files[eachfile],header=T, sep=",",select=c(1:11)) %>%
     tbl_df %>% 
     select(sname, latitude,longitude) %>% #subset needed variables
-    setnames(c("name","lat","lon")) %>% 
+    setnames(c("species","lat","lon")) %>% 
 mutate(source = "obis") # set source
   print(paste("Analyzing file ",csv.files[eachfile],sep=""))
-  retrieved.sp = rbind(retrieved.sp,obis.data)
+  biodiversity.sp = rbind(biodiversity.sp,obis.data)
 }
 
 print("Reading UABCS files")
@@ -372,34 +408,50 @@ for(eachfile in 1:length(xls.files))
   df2 = df[,c(indx.sp,indx.lat,indx.lon,indx.fuen)]
   
   uabcs.data = df2 %>% setNames(c("species","lat","lon","source")) %>% 
+    mutate_each(funs(as.character),lat:lon)%>% 
     mutate_each(funs(as.numeric),lat:lon) 
 
-  retrieved.sp = rbind(retrieved.sp,uabcs.data)
+  biodiversity.sp = rbind(biodiversity.sp,uabcs.data)
   
 }
 
-#' bind spatial records and eliminate duplicates
-biodiversity.coordinates4 = rbind(biodiversity.coordinates3, retrieved.sp)
-#' eliminate duplicates
-biodiversity.coordinates4 = biodiversity.coordinates4[!duplicated(biodiversity.coordinates4[,c('species', 'lat', 'lon')]),]
-#' eliminate rows with NA
-biodiversity.coordinates4 = biodiversity.coordinates4[complete.cases(biodiversity.coordinates4),]#eliminate rows with NA
+write.csv(biodiversity.sp,"record_queries6.csv")
 
-#' print records
-print(paste("Records retreived:", nrow(biodiversity.coordinates4),sep= " "))
 
-#' subset only data in the Gulf
-#' iterates on sets of data otherwise insufficient memory
-#' create new data frame for clean records
+record.files <- list.files(pattern = "record_queries$")# list files
 
 biodiversity = matrix(0,nrow=0,ncol=4) %>% data.frame %>% 
   tbl_df %>% 
   setnames(c("species","lat","lon","source"))
 
-biodiv.rows = nrow(biodiversity.coordinates4)
+for(eachfile in 1:length(record.files))
+{
+  print(paste("Analyzing"," file",eachfile,"_",record.files[eachfile]))
+  
+  this.data = fread(csv.files[eachfile], header=TRUE) 
+    
+  biodiversity = rbind(biodiversity, this.data)
+#' eliminate duplicates
+  biodiversity = biodiversity[!duplicated(biodiversity[,c('species', 'lat', 'lon')]),]
+#' eliminate rows with NA
+  biodiversity = biodiversity[complete.cases(biodiversity),]#eliminate rows with NA
+
+#' print records
+print(paste("Records retreived:", nrow(biodiversity),sep= " "))
+
+}
+#' subset only data in the Gulf
+#' iterates on sets of data otherwise insufficient memory
+#' create new data frame for clean records
+
+biodiversity.all = matrix(0,nrow=0,ncol=4) %>% data.frame %>% 
+  tbl_df %>% 
+  setnames(c("species","lat","lon","source"))
+
+biodiv.rows = nrow(biodiversity)
 iterations = round(biodiv.rows/1000,0)
 
-biodiversity.clean = biodiversity.coordinates4
+biodiversity.clean = biodiversity
 
   last.row = 1001
   first.row = 1
@@ -408,7 +460,8 @@ biodiversity.clean = biodiversity.coordinates4
     new.last.row = ((last.row-1)*eachiteration)
     section.biodiv = biodiversity.clean[first.row:new.last.row,] %>% 
       na.omit %>% 
-      mutate_each(funs(as.numeric),lat,lon) %>% 
+      mutate_each(funs(as.character),lat:lon)%>% 
+      mutate_each(funs(as.numeric),lat:lon) %>%  
       as.data.frame
     
     coordinates(section.biodiv) <- c("lon", "lat")  # set spatial coordinates
@@ -421,13 +474,13 @@ biodiversity.clean = biodiversity.coordinates4
     test.bio = nrow(biodiversity.goc)==0
     if (test.bio==FALSE)
     {
-      biodiversity = rbind(biodiversity,biodiversity.goc)
-      biodiversity = biodiversity[!duplicated(biodiversity[,c('species', 'lon', 'lat')]),]
-      print(paste("Gulf of California database has ",nrow(biodiversity)," species records"))
+      biodiversity.all = rbind(biodiversity.all,biodiversity.goc)
+      biodiversity.all = biodiversity.all[!duplicated(biodiversity.all[,c('species', 'lon', 'lat')]),]
+      print(paste("Gulf of California database has ",nrow(biodiversity.all)," species records"))
       }
     
     first.row = new.last.row+1
   }
 
 setwd(savepath)
-write.csv(biodiversity,file="goc_biodiversity.csv")
+write.csv(biodiversity.all,file="goc_biodiversity.csv")

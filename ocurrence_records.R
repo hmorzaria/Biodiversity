@@ -135,6 +135,7 @@ biodiversity.sp = biodiversity.sp[!duplicated(biodiversity.sp[,c('species', 'lat
 #' print records
 print(paste("Records retreived:", nrow(biodiversity.sp),sep= " "))
 
+setwd(savepath)
 write.csv(biodiversity.sp,file="record_queries1.csv")
 
 #' retrieve iDigBio
@@ -163,6 +164,7 @@ select(scientificname,geopoint.lat,geopoint.lon) %>%
   mutate(species = capitalize(species))
 
 #use this to save the complete data file
+setwd(savepath)
 write.csv(biodiversity.sp,file="record_queries2.csv")
 
 #' print records
@@ -243,6 +245,7 @@ biodiversity.sp = biodiversity.sp[!duplicated(biodiversity.sp[,c('species', 'lat
   }
 
 #use this to save the complete data file
+setwd(savepath)
 write.csv(biodiversity.sp,file="record_queries3.csv")
 
 #' print records
@@ -257,7 +260,7 @@ print("Now querying vertnet")
   # query Vertnet using spatial points  
   
   for(eachpoint in 1:nrow(goc.point.grid)) {
-    for(eachpoint in 4194:nrow(goc.point.grid)) {
+
     this.point = goc.point.grid[eachpoint,]#point
     print(paste("Analyzing grid point ",eachpoint,sep = " "))
         point.lat = this.point[,2]
@@ -273,7 +276,7 @@ print("Now querying vertnet")
         #create scientificname column when species and genus are separate 
         vertnet.data = vertnet.data %>% tbl_df %>% 
           mutate(scientificname = paste(genus,specificepithet, sep= " "))  %>%  
-        select(scientificname, decimallongitude, decimallatitude) %>% 
+        select(scientificname, decimallatitude,decimallongitude) %>% 
         mutate(source = "vertnet") %>% 
           setNames(c('species', 'lat', 'lon',"source")) %>% # rename columns
           mutate_each(funs(as.character),lat:lon)%>% 
@@ -302,8 +305,8 @@ print("Now querying vertnet")
     biodiversity.sp = rbind(biodiversity.sp, vertnet.data)
     }
   
- setwd(savepath)
-write(biodiversity.sp,file="record_queries4.csv")
+setwd(savepath)
+write.csv(biodiversity.sp,file="record_queries4.csv")
 # get ebird records
 print("Now querying ebird")
 
@@ -343,7 +346,12 @@ biodiversity.sp = biodiversity.sp[!duplicated(biodiversity.sp[,c('species', 'lat
 #' print records
 print(paste("Records retreived:", nrow(biodiversity.sp),sep= " "))
 
+setwd(savepath)
 write.csv(biodiversity.sp,"record_queries5.csv")
+
+biodiversity.sp = matrix(0,nrow=0,ncol=4) %>% as.data.frame %>% 
+  setNames(c("species","lat","lon","source")) 
+
 
 print("Now combining pre-existing data")
 print("Reading Ulloa et al. 2006 files")
@@ -351,8 +359,6 @@ print("Reading Ulloa et al. 2006 files")
 # now retreive records from other databases
 setwd(ulloafiles)
 csv.files <- list.files(pattern = "\\.csv$")# list files
-biodiversity.sp = matrix(0,nrow=0,ncol=4) %>% data.frame %>% 
-  setNames(c("species","lat","lon","source"))
 
 for(eachfile in 1:length(csv.files))
 {
@@ -369,7 +375,13 @@ for(eachfile in 1:length(csv.files))
   biodiversity.sp = rbind(biodiversity.sp,ulloa.data)
 }
 
+setwd(savepath)
+write.csv(biodiversity.sp,"record_queries6.csv")
+
 print("Reading OBIS files")
+
+biodiversity.sp = matrix(0,nrow=0,ncol=4) %>% as.data.frame %>% 
+  setNames(c("species","lat","lon","source"))
 
 #' combine obis data downloaded from their website
 setwd(datafiles)#switch directory
@@ -387,12 +399,17 @@ mutate(source = "obis") # set source
   biodiversity.sp = rbind(biodiversity.sp,obis.data)
 }
 
-print("Reading UABCS files")
+setwd(savepath)
+write.csv(biodiversity.sp,"record_queries7.csv")
+
+print("Reading xls files")
+biodiversity.sp = matrix(0,nrow=0,ncol=4) %>% as.data.frame %>% 
+  setNames(c("species","lat","lon","source"))
 
 #' read in xls files collated by Reef ecology lab
 #' 
+setwd(datafiles)
 xls.files <- list.files(pattern = "\\.xlsx$")# list files
-this.source="uabcs"
 #loop to read in data and obtain GOC data
 for(eachfile in 1:length(xls.files))
 {
@@ -400,10 +417,10 @@ for(eachfile in 1:length(xls.files))
   print(paste("Analyzing"," file",eachfile,"_",xls.files[eachfile]))
   
   df = read_excel(xls.files[eachfile], sheet = 1, col_names = TRUE, col_types = NULL, na = "",skip = 0)
-  indx.sp= grep("Especie|Nombre|especie|nombre",colnames(df))
-  indx.fuen= grep('Fuente|fuente|informacion|Base',colnames(df))
-  indx.lon= grep('Longitud|longitud',colnames(df))
-  indx.lat= grep('Latitud|latitud|Latutud',colnames(df))
+  indx.sp= grep("Species|Especie|Nombre|especie|nombre",colnames(df))
+  indx.fuen= grep('Source|Fuente|fuente|informacion|Base',colnames(df))
+  indx.lon= grep('Longitude|Longitud|longitud|Lon',colnames(df))
+  indx.lat= grep('Latitud|latitud|Latutud|Lat',colnames(df))
   
   df2 = df[,c(indx.sp,indx.lat,indx.lon,indx.fuen)]
   
@@ -411,14 +428,17 @@ for(eachfile in 1:length(xls.files))
     mutate_each(funs(as.character),lat:lon)%>% 
     mutate_each(funs(as.numeric),lat:lon) 
 
+  uabcs.data = uabcs.data[complete.cases(uabcs.data),]#eliminate rows with NA
+  
+  print(uabcs.data[1,])
   biodiversity.sp = rbind(biodiversity.sp,uabcs.data)
   
 }
 
-write.csv(biodiversity.sp,"record_queries6.csv")
+setwd(savepath)
+write.csv(biodiversity.sp,"record_queries8.csv")
 
-
-record.files <- list.files(pattern = "record_queries$")# list files
+record.files <- list.files(pattern = "record_queries*")# list files
 
 biodiversity = matrix(0,nrow=0,ncol=4) %>% data.frame %>% 
   tbl_df %>% 
@@ -428,7 +448,7 @@ for(eachfile in 1:length(record.files))
 {
   print(paste("Analyzing"," file",eachfile,"_",record.files[eachfile]))
   
-  this.data = fread(csv.files[eachfile], header=TRUE) 
+  this.data = fread(record.files[eachfile], header=TRUE, select=c('species', 'lat', 'lon','source')) 
     
   biodiversity = rbind(biodiversity, this.data)
 #' eliminate duplicates

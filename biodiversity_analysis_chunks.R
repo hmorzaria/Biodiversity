@@ -67,7 +67,7 @@ savepath = "E:/Archivos/1Archivos/Articulos/En preparacion/Biodiversity_model/An
 setwd(savepath)
 # read in file with all records for the goc 
 
-biodiv.species = biodiversity.all %>% 
+biodiv.species = biodiversity.goc %>% 
   .$species %>% unique 
 
 #' this table has to be read manually 

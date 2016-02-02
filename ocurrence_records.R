@@ -148,13 +148,17 @@ print("Now querying iDigBio")
 for(eachnumber in 1:1000){
  print(paste("Analyzing record",eachnumber))
    thisoffset = 5000*eachnumber
-  df1 <- idig_search_records(rq=list(country="mexico", geopoint=list(type="exists")),
-                             fields=c("scientificname", "geopoint"), limit=5000,offset=thisoffset)
-  biodiversity.sp = rbind(biodiversity.sp,df1)
+   
+  df1 <- try(idig_search_records(rq=list(country="mexico", geopoint=list(type="exists")), fields=c("scientificname", "geopoint"), limit=5000,offset=thisoffset))
+   
+   if(!inherits(df1, "try-error")){
+     
+    biodiversity.sp = rbind(biodiversity.sp,df1)
   biodiversity.sp = biodiversity.sp[!duplicated(biodiversity.sp[,c('scientificname', 'geopoint.lon', 'geopoint.lat')]),]
+  print(paste("Records retreived:", nrow(biodiversity.sp),sep= " "))
+  
   }
-
-setwd(savepath)
+}
 
 #modify data frame names and capitalization
 biodiversity.sp = biodiversity.sp %>% tbl_df %>% 
@@ -170,27 +174,28 @@ write.csv(biodiversity.sp,file="record_queries2.csv")
 #' print records
 print(paste("Records retreived:", nrow(biodiversity.sp),sep= " "))
 
-
+#' use rbison, rgbif, ecoengine packages
+#' tried spocc again but still buggy
 #create new matrix for output of spatial queries
 biodiversity.sp = matrix(0,nrow=0,ncol=4) %>% as.data.frame %>% 
   setNames(c("species","lat","lon","source")) 
 
-#' use rbison, rgbif, ecoengine packages
-#' tried spocc again but still buggy
-
-
 print("Now querying spatial data rbison, rgbif, ecoengine")
 for(eachpolygon in 1:length(poly.data)){
 
- 
-    print(paste("Records retrieved from polygons ",nrow(biodiversity.sp),sep = " "))
-    
-#select polygons or bounding box    
+  print(paste("Records retrieved from polygons ",nrow(biodiversity.sp),sep = " "))
+  #select polygons or bounding box    
   this.polygon = poly.data[eachpolygon]#subset bounding box
   this.bb = bbox.data[eachpolygon]#subset bounding box
-print(paste("Analyzing polygon ",eachpolygon,sep = " "))
-  # obtain bison data  
-bison.data = bison(aoi=this.polygon,count=10000)%>% 
+  print(paste("Bison: Analyzing polygon ",eachpolygon,sep = " "))
+  
+  #ERROR HANDLING
+  # obtain bison data
+  bison.data <- try(bison(aoi=this.polygon,count=10000))
+    
+  if(!inherits(bison.data, "try-error")){
+
+  bison.data = bison(aoi=this.polygon,count=10000)%>% 
   .$points %>% 
   data.frame %>% 
   tbl_df
@@ -207,9 +212,32 @@ if(nrow(bison.data)!=0) {
     setNames(c("species","lat","lon","source"))
 }
 
-# get gbif records
-gbif.data = occ_search(geometry=this.polygon,return='data',fields=c("name","decimalLatitude","decimalLongitude","datasetName","collectionCode"),limit=200000) 
-#' arrange data frame only if records exist
+  biodiversity.sp = rbind(biodiversity.sp, bison.data)
+  biodiversity.sp = biodiversity.sp[!duplicated(biodiversity.sp[,c('species', 'lat', 'lon')]),]
+  
+  }
+}
+setwd(savepath)  
+write.csv(biodiversity.sp,file="record_queries3.csv")
+
+print(paste("Records retreived:", nrow(biodiversity.sp),sep= " "))
+
+biodiversity.sp = matrix(0,nrow=0,ncol=4) %>% as.data.frame %>% 
+  setNames(c("species","lat","lon","source")) 
+
+for(eachpolygon in 1:length(poly.data)){
+  
+  print(paste("Records retrieved from polygons ",nrow(biodiversity.sp),sep = " "))
+  this.polygon = poly.data[eachpolygon]#subset bounding box
+  this.bb = bbox.data[eachpolygon]#subset bounding box
+  print(paste("GBIF: Analyzing polygon ",eachpolygon,sep = " "))
+
+  #ERROR HANDLING
+  # get gbif records
+  gbif.data <- try(occ_search(geometry=this.polygon,return='data',fields=c("name","decimalLatitude","decimalLongitude","datasetName","collectionCode"),limit=200000))
+
+  if(!inherits(gbif.data, "try-error")){
+ #' arrange data frame only if records exist
 #' otherwise returns empty frame
 if(gbif.data[1]!="no data found, try a different search"){
   
@@ -220,9 +248,34 @@ if(gbif.data[1]!="no data found, try a different search"){
   gbif.data = matrix(0,nrow=0,ncol=4) %>% data.frame %>% tbl_df() %>% 
   setNames(c("species","lat","lon","source"))
 } 
+ 
+    biodiversity.sp = rbind(biodiversity.sp, gbif.data)
+    biodiversity.sp = biodiversity.sp[!duplicated(biodiversity.sp[,c('species', 'lat', 'lon')]),]
+  } #end if no error in try catch
+}
+setwd(savepath)  
+write.csv(biodiversity.sp,file="record_queries4.csv")
+print(paste("Records retreived:", nrow(biodiversity.sp),sep= " "))
+
+#get ecoengine
+#create new matrix for output of spatial queries
+biodiversity.sp = matrix(0,nrow=0,ncol=4) %>% as.data.frame %>% 
+  setNames(c("species","lat","lon","source")) 
+
+print("Now querying ecoengine")
+
+for(eachpolygon in 1:length(poly.data)){
   
-#' get ecoengine data
- ee.data.frame = tryCatch(ee_observations(page_size=10000, georeferenced = TRUE,bbox = this.bb),error = function(cond)"No records")
+  print(paste("Records retrieved from polygons ",nrow(biodiversity.sp),sep = " "))
+  this.polygon = poly.data[eachpolygon]#subset bounding box
+  this.bb = bbox.data[eachpolygon]#subset bounding box
+  print(paste("Ecoengine: Analyzing polygon ",eachpolygon,sep = " "))
+  
+  #ERROR HANDLING
+  # obtain ecoengine data
+  ee.data.frame <- try(ee_observations(page_size=10000, georeferenced = TRUE,bbox = this.bb))
+  
+    if(!inherits(ee.data.frame, "try-error")){
  #' arrange data frame only if records exist
  #' otherwise returns empty frame
 if(ee.data.frame!="No records"){
@@ -235,22 +288,16 @@ if(ee.data.frame!="No records"){
     setNames(c("species","lat","lon","source"))
 }
 
-#' bind gbif, bison, and ee data together
-spatial.data = rbind(gbif.data,bison.data,ee.data)
-spatial.data = spatial.data[!duplicated(spatial.data[,c('species', 'lat', 'lon')]),]
-
-biodiversity.sp = rbind(biodiversity.sp, spatial.data)
+biodiversity.sp = rbind(biodiversity.sp, ee.data)
 biodiversity.sp = biodiversity.sp[!duplicated(biodiversity.sp[,c('species', 'lat', 'lon')]),]
 
+}
   }
 
 #use this to save the complete data file
 setwd(savepath)
-write.csv(biodiversity.sp,file="record_queries3.csv")
-
-#' print records
+write.csv(biodiversity.sp,file="record_queries5.csv")
 print(paste("Records retreived:", nrow(biodiversity.sp),sep= " "))
-
 
 #create new matrix for output of spatial queries
 biodiversity.sp = matrix(0,nrow=0,ncol=4) %>% as.data.frame %>% 
@@ -265,9 +312,11 @@ print("Now querying vertnet")
     print(paste("Analyzing grid point ",eachpoint,sep = " "))
         point.lat = this.point[,2]
     point.lon = this.point[,1]
-    
-    vertnet.data <- spatialsearch(lat = point.lat, lon = point.lon, radius = 15000, limit = 1000, verbose= TRUE) %>% 
-      .$data %>% data.frame #radius in meters
+    #ERROR HANDLING
+    vertnet.data <- try(spatialsearch(lat = point.lat, lon = point.lon, radius = 15000, limit = 1000, verbose= TRUE))
+    if(!inherits(vertnet.data, "try-error")){
+      
+      vertnet.data = vertnet.data %>% .$data %>% data.frame #radius in meters
     #' only modify dataframe if records are available
     test.res = is.null(vertnet.data)
     if(test.res==FALSE)
@@ -301,15 +350,17 @@ print("Now querying vertnet")
         vertnet.data = matrix(0,nrow=0,ncol=4) %>% data.frame %>% tbl_df %>% 
           setNames(c("species","lat","lon","source"))
       }
-    
     biodiversity.sp = rbind(biodiversity.sp, vertnet.data)
-    }
+    biodiversity.sp = biodiversity.sp[!duplicated(biodiversity.sp[,c('species', 'lat', 'lon')]),]
+        }
+        }
   
 setwd(savepath)
-write.csv(biodiversity.sp,file="record_queries4.csv")
+write.csv(biodiversity.sp,file="record_queries6.csv")
+print(paste("Records retreived:", nrow(biodiversity.sp),sep= " "))
+
 # get ebird records
 print("Now querying ebird")
-
 biodiversity.sp = matrix(0,nrow=0,ncol=4) %>% as.data.frame %>% 
   setNames(c("species","lat","lon","source")) 
 
@@ -347,7 +398,8 @@ biodiversity.sp = biodiversity.sp[!duplicated(biodiversity.sp[,c('species', 'lat
 print(paste("Records retreived:", nrow(biodiversity.sp),sep= " "))
 
 setwd(savepath)
-write.csv(biodiversity.sp,"record_queries5.csv")
+write.csv(biodiversity.sp,"record_queries7.csv")
+print(paste("Records retreived:", nrow(biodiversity.sp),sep= " "))
 
 biodiversity.sp = matrix(0,nrow=0,ncol=4) %>% as.data.frame %>% 
   setNames(c("species","lat","lon","source")) 
@@ -376,7 +428,8 @@ for(eachfile in 1:length(csv.files))
 }
 
 setwd(savepath)
-write.csv(biodiversity.sp,"record_queries6.csv")
+write.csv(biodiversity.sp,"record_queries8.csv")
+print(paste("Records retreived:", nrow(biodiversity.sp),sep= " "))
 
 print("Reading OBIS files")
 
@@ -400,11 +453,12 @@ mutate(source = "obis") # set source
 }
 
 setwd(savepath)
-write.csv(biodiversity.sp,"record_queries7.csv")
+write.csv(biodiversity.sp,"record_queries9.csv")
+print(paste("Records retreived:", nrow(biodiversity.sp),sep= " "))
 
 print("Reading xls files")
-biodiversity.sp = matrix(0,nrow=0,ncol=4) %>% as.data.frame %>% 
-  setNames(c("species","lat","lon","source"))
+biodiversity.sp = matrix(0,nrow=0,ncol=5) %>% as.data.frame %>% 
+  setNames(c("species","lat","lon","source","file"))
 
 #' read in xls files collated by Reef ecology lab
 #' 
@@ -426,7 +480,8 @@ for(eachfile in 1:length(xls.files))
   
   uabcs.data = df2 %>% setNames(c("species","lat","lon","source")) %>% 
     mutate_each(funs(as.character),lat:lon)%>% 
-    mutate_each(funs(as.numeric),lat:lon) 
+    mutate_each(funs(as.numeric),lat:lon) %>% 
+    mutate(file = xls.files[eachfile])
 
   uabcs.data = uabcs.data[complete.cases(uabcs.data),]#eliminate rows with NA
   
@@ -436,11 +491,16 @@ for(eachfile in 1:length(xls.files))
 }
 
 setwd(savepath)
-write.csv(biodiversity.sp,"record_queries8.csv")
+write.csv(biodiversity.sp,"record_queries10.csv")
+print(paste("Records retreived:", nrow(biodiversity.sp),sep= " "))
 
+#' subset only data in the Gulf
+#' iterates on sets of data otherwise insufficient memory
+#' create new data frame for clean records
+setwd(savepath)
 record.files <- list.files(pattern = "record_queries*")# list files
 
-biodiversity = matrix(0,nrow=0,ncol=4) %>% data.frame %>% 
+biodiversity.all = matrix(0,nrow=0,ncol=4) %>% data.frame %>% 
   tbl_df %>% 
   setnames(c("species","lat","lon","source"))
 
@@ -448,59 +508,45 @@ for(eachfile in 1:length(record.files))
 {
   print(paste("Analyzing"," file",eachfile,"_",record.files[eachfile]))
   
-  this.data = fread(record.files[eachfile], header=TRUE, select=c('species', 'lat', 'lon','source')) 
+  biodiversity = fread(record.files[eachfile], header=TRUE, select=c('species', 'lat', 'lon','source')) 
     
-  biodiversity = rbind(biodiversity, this.data)
-#' eliminate duplicates
   biodiversity = biodiversity[!duplicated(biodiversity[,c('species', 'lat', 'lon')]),]
 #' eliminate rows with NA
   biodiversity = biodiversity[complete.cases(biodiversity),]#eliminate rows with NA
 
-#' print records
-print(paste("Records retreived:", nrow(biodiversity),sep= " "))
-
+  biodiversity.all = rbind(biodiversity.all,biodiversity)
 }
-#' subset only data in the Gulf
-#' iterates on sets of data otherwise insufficient memory
-#' create new data frame for clean records
+  
+setwd(savepath)
+write.csv(biodiversity.all,"record_queries_all.csv")
+print(paste("Records retreived:", nrow(biodiversity.all),sep= " "))
 
-biodiversity.all = matrix(0,nrow=0,ncol=4) %>% data.frame %>% 
+biodiv.rows = nrow(biodiversity.all)
+
+biodiversity.goc = matrix(0,nrow=0,ncol=4) %>% data.frame %>% 
   tbl_df %>% 
   setnames(c("species","lat","lon","source"))
 
-biodiv.rows = nrow(biodiversity)
-iterations = round(biodiv.rows/1000,0)
-
-biodiversity.clean = biodiversity
-
-  last.row = 1001
-  first.row = 1
+for(eachrow in 1:biodiv.rows){
   
-  for (eachiteration in 1:iterations)  {
-    new.last.row = ((last.row-1)*eachiteration)
-    section.biodiv = biodiversity.clean[first.row:new.last.row,] %>% 
-      na.omit %>% 
-      mutate_each(funs(as.character),lat:lon)%>% 
-      mutate_each(funs(as.numeric),lat:lon) %>%  
-      as.data.frame
-    
-    coordinates(section.biodiv) <- c("lon", "lat")  # set spatial coordinates
-    proj4string(section.biodiv) <- crs.geo.wgs  # define projection system of our data
-    print(summary(section.biodiv)) # print summary
-    # subset ocurrence points within GOC
-    stations_subset <- section.biodiv[goc.shape, ]
-    #get table from shapefile
-    biodiversity.goc <- as(stations_subset, "data.frame")
-    test.bio = nrow(biodiversity.goc)==0
-    if (test.bio==FALSE)
-    {
-      biodiversity.all = rbind(biodiversity.all,biodiversity.goc)
-      biodiversity.all = biodiversity.all[!duplicated(biodiversity.all[,c('species', 'lon', 'lat')]),]
-      print(paste("Gulf of California database has ",nrow(biodiversity.all)," species records"))
-      }
-    
-    first.row = new.last.row+1
+x = biodiversity.all[eachrow]
+  coordinates(x) <- c("lon", "lat")  # set spatial coordinates
+  proj4string(x) <- crs.geo.wgs  # define projection system of our data
+
+  # subset ocurrence points within GOC
+  #get table from shapefile
+  biodiversity.sec <- x[goc.shape, ] %>% as("data.frame") %>% tbl_df
+  test.bio = nrow(biodiversity.sec)==0
+  
+  if (test.bio==FALSE)
+  {
+    biodiversity.goc = rbind(biodiversity.goc,biodiversity.sec)
+    biodiversity.goc = biodiversity.goc[!duplicated(biodiversity.goc[,c('species', 'lon', 'lat')]),]
+    print(paste("Gulf of California database has ",nrow(biodiversity.goc)," species records"))
   }
+}
 
 setwd(savepath)
-write.csv(biodiversity.all,file="goc_biodiversity.csv")
+write.csv(biodiversity.goc,"goc_species_ocurrence.csv")
+print(paste("GOC records retreived:", nrow(biodiversity.goc),sep= " "))
+

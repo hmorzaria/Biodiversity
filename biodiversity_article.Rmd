@@ -1,0 +1,212 @@
+---
+title: "Species richness model for the Gulf of California, Mexico"
+author: "Hem Nalini Morzaria-Luna^1^*, Gabriela Cruz-Piñon^1,2^, Peggy Turk-Boyer^1^, Marcia Moreno-Báez^3^"
+date: 'Version 2: September 15, 2015'
+output: word_document
+self_contained: no
+bibliography: references.bib
+---
+
+*Corresponding author (email: hmorzarialuna@gmail.com)  
+1. Intercultural Center for the Study of Deserts and Oceans, Inc. PO Box 44208. Tucson AZ. USA  
+2. Departamento de Biología Marina. Universidad Autónoma de Baja California Sur. Carretera al Sur Km 5.5, Apartado Postal 19-B, C.P. 23080. La Paz, Baja California Sur. Mexico. 
+3. Centro para la Biodiversidad Marina y la Conservación A.C. La Paz, Baja California Sur. 23090. Mexico.
+
+```{r, echo=FALSE, warning=FALSE, message=FALSE, results="hide"}
+if(!require(dismo)){install.packages("dismo"); library(dismo)}
+if(!require(data.table)){install.packages("data.table"); library(data.table)}
+if(!require(XML)){install.packages("XML"); library(XML)}
+if(!require(jsonlite)){install.packages("jsonlite"); library(jsonlite)}
+if(!require(graphics)){install.packages("graphics"); library(graphics)}
+if(!require(maps)){install.packages("maps"); library(maps)}
+if(!require(maptools)){install.packages("maptools"); library(maptools)}
+if(!require(rgeos)){install.packages("rgeos"); library(rgeos)}
+if(!require(rgdal)){install.packages("rgdal"); library(rgdal)}
+if(!require(magrittr)){install.packages("magrittr"); library(magrittr)}
+if(!require(dplyr)){install.packages("dplyr"); library(dplyr)}
+if(!require(Hmisc)){install.packages("Hmisc"); library(Hmisc)}
+if(!require(spocc)){install.packages("spocc"); library(spocc)}
+if(!require(rgdal)){install.packages("rgdal"); library(rgdal)}
+if(!require(ridigbio)){install.packages("ridigbio"); library(ridigbio)}
+if(!require(rvertnet)){install.packages("rvertnet"); library(rvertnet)}
+if(!require(ecoengine)){install.packages("ecoengine"); library(ecoengine)}
+if(!require(rbison)){install.packages("rbison"); library(rbison)}
+if(!require(rgbif)){install.packages("rgbif"); library(rgbif)}
+if(!require(rebird)){install.packages("rebird"); library(rebird)}
+if(!require(readxl)){install.packages("readxl"); library(readxl)}
+if(!require(knitr)){install.packages("knitr"); library(knitr)}
+if(!require(knitcitations)){install.packages("knitcitations"); library(knitcitations)}
+if(!require(taxize)){install.packages("taxize"); library(taxize)}
+if(!require(sperich)){install.packages("sperich"); library(sperich)}
+if(!require(xtable)){install.packages("xtable"); library(xtable)}
+
+
+cleanbib()
+options("citation_format" = "pandoc")
+# read chunk (does not run code)
+read_chunk('biodiversity_analysis_chunks.R')
+#bib <- read.bibtex("Bibrefs.bib") #bibliography already set in YAML
+
+```
+
+```{r getbio, echo=FALSE, eval=FALSE, warning=FALSE, message=FALSE}
+#this code accesses repositories and retrieves data 
+<<getbiodiversity>>
+```
+ 
+```{r orgbio, echo=FALSE, eval=FALSE, warning=FALSE, message=FALSE}
+#This code takes the data retrieved and merges it into one set eliminating duplicates
+#also saves unique list of species for taxonomy check
+<<organizebiodiversity>>
+```
+
+```{r checktaxon, echo=FALSE, eval=FALSE, warning=FALSE, message=FALSE}
+#This code takes the taxonomy list and loops through it using taxo
+#really not necessary to run it every time, laso need to have updated xls species list file
+<<checktaxonomy>>
+```
+
+```{r updatetaxo, echo=FALSE, eval=FALSE, warning=FALSE, message=FALSE}
+#Takes checked taxonomy and updates species list
+<<updatetaxonomy>>
+```
+
+```{r mapbio1, echo=FALSE, warning=FALSE, message=FALSE}
+analysispath="E:/Archivos/1Archivos/Articulos/En preparacion/Biodiversity_model/Analysis" #put path
+
+    setwd(analysispath)
+    
+     biodiversity.records = fread("biodiver_species_goc.csv", header=T, na.strings="NA") %>% nrow
+
+    unique.species = fread("biodiver_species_goc.csv", header=T, na.strings="NA") %>% .$NewSpecies %>% unique %>% length
+    
+    old.biodiversity.records = fread("goc_biodiversity.csv", header=T, na.strings="NA") %>% .$NewSpecies %>% unique %>% length
+    
+```
+
+##Abstract
+
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;There is a growing interest in identifying biodiversity hotposts for use in spatial planning and conservation planning exercises. As marine systems are threatened by accelerated human activities, biodiverse areas may serve as proxies to maintain ecosystem function and services, while efficiently using limited resources for conservation and resource management. We derived a species richness model by interpolating presence-only data from the Gulf of California, Mexico. We assembled a database with `r biodiversity.records` occurrence records corresponding to `r unique.species` unique species assembled from on-line data repositories and published literature. We then show how assessment of biodiversity hotspots can be used in a marine spatial planning exercise in the Northern Gulf to identify areas where conflicts with other human uses can be ameliorated.
+
+##Keywords: species richness; marine spatial planning; biodiversity; Gulf of California
+-----------
+##Introduction
+
+Maintaining ocean health will require considering multiple human uses, their compatibilities and conflicts `r citep ("10.2307/25065916")`. Marine spatial planning (MSP) is an integrated framework that can be used to organize the spatial distribution of multiple human activities while maintaining delivery of ecosystem services `r citep("10.1016/j.marpol.2008.03.021")`. Maintaining biodiversity, species composition, and functional diversity are necessary to preserve ecosystem services `r citep ("10.2307/25065916")`. Biodiversity can determine multiple ecosystem functions, including productivity `r citep("Plant diversity and ecosystem productivity",year="1997")`, resilience `r citep("10.1641/B580108")`, and stable food web dynamics `r citep("10.1111/j.1461-0248.2004.00593.x")`. Analyzing the distribution of biodiversity can also aid in systematic conservation planning, where portions of the ocean requiring special management are identified `r citep ("dx.doi.org/10.1016/j.biocon.2011.11.017")` and in the management of marine resources `r citep("10.3354/meps10857")`.  
+Biodiversity can be measured in multiple ways, as species richness, composition, genetic or functional diversity; each metric provides information about a different attribute of ecosystem function and structure `r citep ("10.2307/25065916")`; overall, areas with higher diversity support greater ecosystem functions and services `r citep("10.3354/meps311273")`. In particular, species richness is a useful proxy for ecosystem structure and higher habitat diversity  `r citep (c("10.1016/j.jembe.2008.07.016","10.2307/25065916"))`. Species richness can be used to estimate centers of biodiversity `r citep("10.1007/s10531-010-9785-1")`.  
+Effective management of marine resources requires detailed data on species distributions, however collecting detailed biodiversity data may require intensive and expensive sampling `r citep("10.3354/meps10857")`. Spatial biodiversity datasets that integrate and distribute data from multiple sources including natural history collections can now be searched and downloaded (i.e. Table 1), at the same time that computation and analytical tools are being developed that allow its analysis `r citep("10.1016/j.tree.2004.07.006")`. Presence-only data has been frequently used to map species biodiversity although it is frequently biased in favor of coastal areas, excludes offshore regions, and may be systematically inaccurate `r citep("10.1007/s10531-010-9785-1")`.  
+
+Here, we apply an interpolation approach based on species occurrence data to identify biodiversity hotspots in the Gulf of California. We then illustrate how this model can be used to inform a marine spatial planning process in the Northern Gulf. The Gulf of California is one of the world's most biologically rich marine regions; it exhibits a high biological diversity, supports high productivity, and harbors large populations of marine taxa `r citep("10.1016/j.pocean.2007.01.013")`. The Gulf of California contributes about half of Mexico's total fisheries production (Brusca 2010). The Gulf's biodiversity is at risk from anthropogenic impacts, including overfishing which alters trophic structure `r citep("10.1111/j.1365-2664.2011.02064.x")`, bottom trawling which disturbs benthic ecosystems `r citep ("10.1371/journal.pone.0035609")`, and urban development which has altered the coastline `r citep ("10.1007/s11273-013-9328-0")`; thus, spatial planning approaches are necessary to maintain ecosystem structure and function (Turk-Boyer et al. 2014). There have been several attempts to assess areas of high biodiversity in the Gulf of California, within the context of identifying important areas for conservation. For example, Ulloa et al. (2006) used 45, 895 taxa records from available databases and expert knowledge for a regional biodiversity assessment using spatial prioritization software. Meanwhile, `r citet("10.1126/science.1075284")` used species richness surveyed in rocky reefs across the Gulf to prioritize a network of marine reserves. The model presented here will also support a current effort to develop general MPA placement rules in the Gulf of California, implemented by The Nature Conservancy.   
+
+
+##Methods
+
+Our analysis was based on species occurrence data for marine taxa obtained from on-line repositories (Table 1), which include records from observations and samples. These databases allow queries through an application programming interface (API), permitting the retrieval of large numbers of records over specific geographical areas. We also included sea grass and shark records collected by Ulloa et al. (2006) for a regional assessment; records for target species fishing zones `r citep("10.1371/journal.pone.0004140")` and fishing sites (Turk-Boyer et al. 2014); fish and invertebrates monitored in subtidal transects (Mungia et al. In Press); and blue crab (Loaiza-Villanueva et al. 2009), rock scallop, and black murex population assessments `r citep("10.1371/journal.pone.0004140")`. We eliminated duplicate geographical records for each species, records that were incorrectly georreferenced, and records identified to a taxonomic resolution different from species. Finally, we checked for name validity and updated synonyms.  
+
+**Table 1. Data sources**  
+
+```{r tablecode, echo=FALSE}
+
+Name = c("Ocean Biogeographic information System (OBIS)", "Global Biodiversity Information Facility (GBIF)","HOLOS Ecoinformatics Engine (EcoEngine)","VertNet","Biodiversity Information Serving Our Nation (Bison)","ebird","iDigBio","FishBase")
+Taxa = c("Marine species","General","General","Vertebrates","General","Birds","General","Fish")
+Link = c("www.iobis.org","www.gbif.org","holos.berkeley.edu","www.vertnet.org","bison.usgs.ornl.gov", "ebird.org","www.idigbio.org","www.fishbase.org")
+
+df = data.frame(Name,Taxa,Link) %>%  
+  xtable(floating=FALSE)
+```
+  
+```{r table1, echo=FALSE}
+print.xtable(df, type="html", include.rownames = FALSE)
+#, results="asis" in bracket when knitting to html
+```
+
+We used the approach developed by `r citet("10.1007/s10531-010-9785-1")` to estimate species richness patterns through interpolation. This approach is useful for presence-only data that represents areas that have been visited, species that have been found, and includes species with few occurrences (<5). We briefly describe the algorithm, more details are found in `r citet("10.1007/s10531-010-9785-1")`. The first step was to overlay species richness point data to a 9 km^2^ grid. We used this scale to match the resolution of previous studies analyzing species distribution areas (Reyes-Bonilla et al. unpublished data) and fishing zones `r citep("10.1016/j.ocecoaman.2011.10.001")` in the region.  
+The algorithm then performs an interpolation based on a conditional triangulation using the centroids of the grids. Interpolated species ranges were then summed across species to create an estimate of species richness. To reduce the impact of uneven sampling effort, a weighing factor was then incorporated based on the ratio of the number of species recorded in a quadrat and the maximum number of species reported for each center of species richness in the grid map. For each specific quadrat, higher weights indicate that a larger fraction of interpolated species richness is used in the final estimation. The species richness estimate is expressed as normalized index between 0 and 1. The robustness of the interpolation is then estimated by repeating the interpolation in subsamples of species points to cross-validate the interpolated species ranges. The cross-validated richness estimate is divided by the weighted species richness to obtain the mean robustness per quadrat.  
+
+Finally, we derived a species richness model for the Punta Borrascoso - Puerto Lobos, Sonora coastal corridor. This area is a well-studied, distinct management unit for fisheries (Turk-Boyer et al. 2014). The corridor serves as a case study on how species richness models may be integrated into marine spatial planning. As an example, we estimated the overlap between the richness index and an index describing the economic value of fisheries in the corridor. Previously, fishing areas in the Northern Gulf were previously assessed through participatory mapping `r citep("10.1016/j.ocecoaman.2011.10.001")`. Economic fishing importance was then calculated by normalizing the weights assigned during interviews to fishing grounds based on their relative importance of target species by total fishing area. The value was multiplied by 2006-2007 average beach price, and summing across species; the final index is expressed on a 0-1 scale(Moreno-Báez 2010). The overlap layer was calculated by subtracting the economic value index from the richness index in each spatial grid cell and normalizing the resulting value. High overlap index values represent high richness/low fisheries value areas and low values are high fishing value/low richness.   
+
+The analysis was carried out in the R statistical framework `r citep(citation("base"))`. We used packages rvertnet `r citep(citation("rvertnet"))`, rbison `r citep(citation("rbison"))`, rebird `r citep(citation("rebird"))`, ridigbio `r citep(citation("ridigbio"))`, and ecoengine `r citep(citation("ecoengine"))` for data retrieval; dplyr `r citep(citation("dplyr"))` and sperich `r citep(citation("sperich"))` for data analysis; taxize `r citep(citation("taxize"))`to validate species taxonomy; ggmap `r citep(citation("ggmap"))`, cowplot `r citep(citation("cowplot"))`, and ggplot2 `r citep(citation("ggplot2"))` for data presentation; and rmarkdown `r citep(citation("rmarkdown"))` and knitr `r citep(citation("knitr"))` for reproducible research. The database of species occurrence and accompanying metadata is deposited at the Knowledge Network for Biocomplexity (KNB) repository (https://knb.ecoinformatics.org). The R code used for the analysis is available in GitHub, https://github.com/hmorzaria/Biodiversity
+
+
+##Results and Discussion
+
+The preliminary database had `r old.biodiversity.records` records corresponding to taxa observed or collected between 1860 and 2014. After eliminating duplicate records and correcting for synonyms and valid scientific names, the final database had `r biodiversity.records` records belonging to `r unique.species` unique species distributed across the Gulf (Figure 1). As a comparison, previously, Brusca (2010) indicated 6000 animal species had been recorded in the Gulf. The database produced here is a comprehensive account of recorded species in the Gulf of California. When species records are converted to a point to grid map (Figure 1), we can observe species richness centers in the Upper Gulf and along the coast. These are areas that are easily accessible and have been the focus of multiple research studies.
+
+
+```{r fig1_rmodel, echo=FALSE, eval=FALSE, message=FALSE, results="hide"}
+# Using package sperich to create biodiversity model 
+<<mapbiodiversity>>
+
+```
+ 
+
+**Figure 1**. Species records and point to grid species richness map in the Northern Gulf of California  
+
+![Figure 2](goc_richness_non.png)
+
+  
+The final richness map adjusts for sampling effort according to the center of species richness (Figure 2). Our model of species richness showed that the Midriff Islands and the southern Gulf are important biodiversity centers. Although we used a larger number of species records than previous studies, we identified similar biodiversity centers.
+  
+**Figure 2**. Indices for interpolated species richness and robustness in the Gulf of California. 
+
+![Figure 3](goc_richness_results.png)
+
+We then extracted the species occurrence records found in the Punta Borrascoso - Puerto Lobos coastal corridor (Figure 4).  
+
+```{r fig4, echo=FALSE, eval=FALSE, message=FALSE}
+# extract corridor points
+<<corridorpoints>>
+
+```
+
+**Figure 4**. Species records in the Punta Borrascoso - Puerto Lobos coastal corridor
+
+
+![Figure 4](map_goc_points_corridor.png) 
+
+```{r corrrecs, echo=FALSE, warning=FALSE, message=FALSE}
+# extract corridor points
+analysispath="E:/Archivos/1Archivos/Articulos/En preparacion/Biodiversity_model/Analysis" #put path
+
+setwd(analysispath)
+corridorrecords = fread("biodiver_species_corridor.csv",header=TRUE) %>% 
+nrow
+
+
+```
+
+These `r corridorrecords` records were used to generate a richness model specific to the coastal corridor. We then estimated the overlap between richness and fisheries value in the coastal corridor (Figure 5). Within the context of marine spatial planning, this index highlights areas areas where maintaining biodiversity could result in lower economic impacts. 
+
+```{r rmodelcorr, echo=FALSE, eval=FALSE, message=FALSE, results="hide"}
+# Using package sperich to create biodiversity model 
+<<richnessmodelcorridor>>
+<<conflictindex>>
+```
+
+
+**Figure 5**. Indices of interpolated species richness, robustness, economic value, and overlap between richness and economic value in the Punta Borrascoso - Puerto Lobos coastal corridor.  
+![Figure 5](overlap_corridor.png)
+
+```{r savebib, echo=FALSE, message=FALSE}
+write.bibtex(file="references.bib")
+```
+
+
+```{r session_info, include=TRUE, echo=TRUE, eval=FALSE, results='markup'}
+#show this to record session info 
+devtools::session_info()
+```
+##Conclusions
+We developed a species ocurrence database drawing on the wealth of data that has been aggregated by researchers in the Gulf of California. The database we developed may also be used to analyze species ocurrence patterns through modeling techniques that describe spatial species-habitat relationships `r citep ("dx.doi.org/10.1016/j.biocon.2011.11.017")`.
+
+## Acknowledgements
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;This project was part of the marine spatial planning process for the Punta Borrascoso - Puerto Lobos coastal corridor; we thank the technical advisory committee for feedback on an early version of the biodiversity model. The project was funded through a Blue Solutions (Federal Ministry for the Environment, Nature Conservation, Building and Nuclear Safety of the Federal Republic of Germany) grant to CEDO Intercultural. Author roles: data analysis, HML MMB, data acquisition HML GCP MMB PTB, writing HML GCP MMB PBT. 
+
+##References
+Brusca, R. 2010. Introduction. In R. Brusca (Ed.), Gulf of California: Biodiversity and Conservation (pp. 119–134). Tucson Ariz.: University of Arizona Press;Arizona-Sonora Desert Museum.  
+CONAPESCA. 2014. Anuario Estadistico de Acuacultura y Pesca (1980-2014). México, D.F. 
+Cisneros-Mata, M. A. 2010. The importance of fisheries in the Gulf of California and ecosystem-based sustainable co-management for conservation. In R. Brusca (Ed.), Gulf of California: Biodiversity and Conservation (pp. 119–134). Tucson Ariz.: University of Arizona Press;Arizona-Sonora Desert Museum.  
+Loaiza-Villanueva, R., Castañeda-Fernández de Lara, V., Pérez-Valencia, S., Sánchez-Cruz, A., & Martínez-Tobar, I. 2009. Monitoreo poblacional de jaiba Callinectes spp. en la costa norte de Sonora en el corredor Bahia Adair-Desemboque de Caborca, 2008-2009. Puerto Penasco, Sonora, México.  
+Moreno-Báez, M. (2010). Mapping human dimensions of small-scale fisheries in the Northern Gulf of California, Mexico. Ph.D. thesis. The University of Arizona, Tucson, AZ. Retrieved from http://arizona.openrepository.com/arizona/handle/10150/194118  
+Turk-Boyer, P. J., Morzaria-Luna, H., Martínez, I., Downton-Hoffman, C. A., & Munguia-Vega, A. 2014. Ecosystem-based Fisheries Management of a Biological Corridor along Northern Sonora Coastline. In F. Amezcua & B. Bellgraph (Eds.), (pp. 155–180). Springer Verlag.  
+Ulloa, R., Torre, J., Bourillón, L., & Alcantara, N. 2006. Planeación ecoregional para la conservación marina: Golfo de California y costa occidental de Baja California Sur. Guaymas, Sonora: Comunidad y Biodiversidad, A.C. Retrieved from http://cobi.org.mx/wp-content/uploads/2012/08/2006-t-Reporte_final_EGCYPBCS_mayo.pdf  

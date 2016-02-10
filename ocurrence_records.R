@@ -522,20 +522,36 @@ write.csv(biodiversity.all,"record_queries_all.csv")
 print(paste("Records retreived:", nrow(biodiversity.all),sep= " "))
 
 biodiv.rows = nrow(biodiversity.all)
+iterations = round(biodiv.rows/1000,0)
 
 biodiversity.goc = matrix(0,nrow=0,ncol=4) %>% data.frame %>% 
   tbl_df %>% 
   setnames(c("species","lat","lon","source"))
 
-for(eachrow in 1:biodiv.rows){
+last.row = 1001
+first.row = 1
+
+#for(eachrow in 1654759:biodiv.rows){
+ 
+for (each.iteration in 2034:iterations)
+      
+    {
+      new.last.row = ((last.row-1)*each.iteration)
   
-x = biodiversity.all[eachrow]
+    
+    ##
+  print(paste("Analyzing row ",first.row," to ",new.last.row," out of ",biodiv.rows, sep=""))
+  x = biodiversity.all[first.row:new.last.row,] %>% 
+    na.omit %>% 
+    mutate_each(funs(as.numeric),lat,lon) %>% 
+    as.data.frame
+  
   coordinates(x) <- c("lon", "lat")  # set spatial coordinates
   proj4string(x) <- crs.geo.wgs  # define projection system of our data
 
   # subset ocurrence points within GOC
   #get table from shapefile
-  biodiversity.sec <- x[goc.shape, ] %>% as("data.frame") %>% tbl_df
+  biodiversity.sec <- x[goc.shape, ] %>% as("data.frame")
   test.bio = nrow(biodiversity.sec)==0
   
   if (test.bio==FALSE)
@@ -544,9 +560,15 @@ x = biodiversity.all[eachrow]
     biodiversity.goc = biodiversity.goc[!duplicated(biodiversity.goc[,c('species', 'lon', 'lat')]),]
     print(paste("Gulf of California database has ",nrow(biodiversity.goc)," species records"))
   }
+  
+  first.row = new.last.row+1
 }
 
+
 setwd(savepath)
+biodiversity.goc = biodiversity.goc[!duplicated(biodiversity.goc[,c('species', 'lon', 'lat')]),]
+biodiversity.goc = biodiversity.goc[complete.cases(biodiversity.goc),]#eliminate rows with NA
+
 write.csv(biodiversity.goc,"goc_species_ocurrence.csv")
 print(paste("GOC records retreived:", nrow(biodiversity.goc),sep= " "))
 
